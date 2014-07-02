@@ -1,6 +1,7 @@
 name:                toml
 version:             0.1.0.0
 synopsis:            TOML parser
+description:         For parsing TOML. Also includes lenses.
 license:             BSD2
 license-file:        LICENSE
 author:              Joel Taylor
@@ -9,9 +10,14 @@ category:            Text
 build-type:          Simple
 cabal-version:       >=1.10
 
+source-repository head
+  type: git
+  location: https://github.com/joelteon/toml.git
+
 library
   exposed-modules:     Text.Parser.Toml
                        Text.Parser.Toml.Pretty
+  other-modules:       Text.Parser.Toml.TH
   ghc-options:         -Wall
   build-depends:       base >=4.7 && <4.8
                      , aeson

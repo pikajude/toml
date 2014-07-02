@@ -22,7 +22,7 @@ module Text.Parser.Toml (
     table, tables, scalar,
 
     -- *** Scalar lenses
-    string, decimal, floating, bool, date, list,
+    string, decimal, floating, bool, date, list, listOf,
 
     -- *** Top-level value prisms
     _Table, _Tables, _Scalar,
@@ -154,7 +154,6 @@ data Directive = SetD String Scalar
                deriving Show
 
 data TableType = Dictionary | Array deriving (Eq, Show)
-
 
 -- | Parse some TOML.
 toml :: (TokenParsing m, MonadPlus m) => m Toml
@@ -343,6 +342,9 @@ scalar t = ix t . _Scalar
 -- present, but is not a 'String'.
 --
 -- @foo = "bar"@
+--
+-- >>> doc ^? string "foo"
+-- Just "bar"
 string :: (Ixed m, IxValue m ~ Value)
        => Index m -> Traversal' m Text
 string t = ix t . _Scalar . _String
@@ -351,6 +353,9 @@ string t = ix t . _Scalar . _String
 -- present, but is not a 'Decimal'.
 --
 -- @foo = 1234@
+--
+-- >>> doc ^? decimal "foo"
+-- Just 1234
 decimal :: (Ixed m, IxValue m ~ Value)
         => Index m -> Traversal' m Integer
 decimal t = ix t . _Scalar . _Decimal
@@ -359,6 +364,9 @@ decimal t = ix t . _Scalar . _Decimal
 -- present, but is not 'Floating'.
 --
 -- @foo = 1234.567@
+--
+-- >>> doc ^? floating "foo"
+-- Just 1234.567
 floating :: (Ixed m, IxValue m ~ Value)
          => Index m -> Traversal' m Double
 floating t = ix t . _Scalar . _Floating
@@ -367,6 +375,9 @@ floating t = ix t . _Scalar . _Floating
 -- present, but is not a 'Bool'.
 --
 -- @foo = false@
+--
+-- >>> doc ^? bool "foo"
+-- Just False
 bool :: (Ixed m, IxValue m ~ Value)
      => Index m -> Traversal' m Bool
 bool t = ix t . _Scalar . _Bool
@@ -375,6 +386,9 @@ bool t = ix t . _Scalar . _Bool
 -- present, but is not a 'Date'.
 --
 -- @foo = 1994-04-28T05:30:22Z@
+--
+-- >>> doc ^? date "foo"
+-- Just 1994-04-28 05:30:22 UTC
 date :: (Ixed m, IxValue m ~ Value)
      => Index m -> Traversal' m UTCTime
 date t = ix t . _Scalar . _Date
@@ -383,9 +397,26 @@ date t = ix t . _Scalar . _Date
 -- present, but is not a 'List'.
 --
 -- @foo = [1, 2, 3]@
+--
+-- >>> doc ^? list "foo"
+-- Just (fromList [Decimal 1,Decimal 2,Decimal 3])
 list :: (Ixed m, IxValue m ~ Value)
      => Index m -> Traversal' m (Vector Scalar)
 list t = ix t . _Scalar . _List
+
+-- | Given a key name and a prism, target all the elements of a 'List' that
+-- match the prism. Will fail if the key is present, but is not a 'List'.
+-- Will fail if the list elements do not match the prism. (In TOML,
+-- lists are homogeneous, so you will always either retrieve the whole list
+-- or none of it.)
+--
+-- @foo = [1, 2, 3]@
+--
+-- >>> doc ^.. listOf "foo" _Decimal
+-- [1,2,3]
+listOf :: (Ixed m, IxValue m ~ Value)
+       => Index m -> Prism' Scalar p -> Traversal' m p
+listOf t p = ix t . _Scalar . _List . traverse . p
 
 -- $lensdoc
 -- Traversing anything JSON-like in Haskell is usually a huge pain unless
