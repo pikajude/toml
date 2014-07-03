@@ -1,14 +1,12 @@
-{-# LANGUAGE ViewPatterns #-}
-
 -- | Pretty-print TOML.
 module Text.Parser.Toml.Pretty (ppr) where
 
 import Data.Aeson (encode, toJSON)
 import qualified Data.ByteString.Lazy.UTF8 as B
+import Data.Foldable
 import qualified Data.Map as M
 import Data.Text (Text)
 import Data.Time.ISO8601
-import qualified Data.Vector as V
 import Text.Parser.Toml
 import Text.PrettyPrint.ANSI.Leijen
 
@@ -104,7 +102,7 @@ pprValue :: Value -> Doc
 pprValue (Table t) = ppr t
 pprValue (Tables ts) = vsep
     [ lbracket
-    , indent 2 (vcat (punctuate comma $ map ppr $ V.toList ts))
+    , indent 2 (vcat (punctuate comma $ map ppr $ toList ts))
     , rbracket ]
 pprValue (Scalar s) = pprScalar s
 
@@ -115,4 +113,5 @@ pprScalar (Floating f) = double f
 pprScalar (Bool True) = text "true"
 pprScalar (Bool False) = text "false"
 pprScalar (Date d) = text $ show (formatISO8601 d)
-pprScalar (List vs) = brackets $ hsep (punctuate comma . map pprScalar $ V.toList vs)
+pprScalar (List vs) = brackets $ hsep
+    (punctuate comma . map pprScalar $ toList vs)

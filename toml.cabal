@@ -18,7 +18,7 @@ library
   exposed-modules:     Text.Parser.Toml
                        Text.Parser.Toml.Pretty
   other-modules:       Text.Parser.Toml.TH
-  ghc-options:         -Wall
+  ghc-options:         -Wall -Werror
   build-depends:       base >=4.7 && <4.8
                      , aeson
                      , ansi-wl-pprint
@@ -44,4 +44,12 @@ test-suite doctests
   main-is:             doctests.hs
   hs-source-dirs:      tests
   build-depends:       base, doctest >= 0.8
+  default-language:    Haskell2010
+
+test-suite corners
+  type:                exitcode-stdio-1.0
+  ghc-options:         -threaded -with-rtsopts=-N
+  main-is:             corners.hs
+  hs-source-dirs:      tests
+  build-depends:       base, hspec, toml
   default-language:    Haskell2010

@@ -1,12 +1,14 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Text.Parser.Toml (
@@ -40,11 +42,14 @@ import Control.Monad.State
 import Data.Aeson (ToJSON (..))
 import Data.Char
 import Data.Data
+import Data.Foldable (toList)
 import Data.List
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe
 import Data.Monoid
+import Data.Sequence (Seq)
+import qualified Data.Sequence as S
 import Data.String
 import Data.Text (Text, pack)
 import qualified Data.Text as T
@@ -83,13 +88,13 @@ type Toml = Map Text Value
 -- val3 = "baz"
 -- @
 data Value = Table Toml
-           | Tables (Vector Toml)
+           | Tables (Seq Toml)
            | Scalar Scalar
            deriving INSTANCES
 
 instance ToJSON Value where
     toJSON (Table t) = toJSON t
-    toJSON (Tables ts) = toJSON ts
+    toJSON (Tables ts) = toJSON . toList $ ts
     toJSON (Scalar s) = toJSON s
 
 instance NFData Value where
@@ -132,7 +137,7 @@ instance NFData Scalar where
     rnf (List t) = rnf t
 
 prismatic "Table" "Value" "Toml"
-prismatic "Tables" "Value" "Vector Toml"
+prismatic "Tables" "Value" "Seq Toml"
 prismatic "Scalar" "Value" "Scalar"
 
 prismatic "String" "Scalar" "Text"
@@ -149,17 +154,31 @@ instance DeltaParsing p => DeltaParsing (Unlined p) where
     position = lift position
     slicedWith f = Unlined . slicedWith f . runUnlined
 
+instance MarkParsing d m => MarkParsing d (Unlined m) where
+    mark = Unlined mark
+    release = Unlined . release
+
+
+type KeyPath = [Text]
 
 -- not exposed, used during parsing
 data Directive = SetD String Scalar
-               | TableD TableType [Text]
+               | TableD TableType KeyPath
                deriving Show
 
 data TableType = Dictionary | Array deriving (Eq, Show)
 
+data ParseState = ParseState
+                { _definedTables :: [(TableType, KeyPath)]
+                , _definedKeypaths :: [KeyPath]
+                }
+
+makeLenses ''ParseState
+
 -- | Parse some TOML.
 toml :: (TokenParsing m, MonadPlus m) => m Toml
-toml = fmap generate . runUnlined . (`evalStateT` []) . fmap catMaybes
+toml = fmap generate . runUnlined . (`evalStateT` ParseState [] [])
+     . fmap catMaybes
      $ (whiteSpace *> entity) `sepBy` char '\n' <* eof where
     entity = anyOf $
                 [ comment
@@ -168,13 +187,28 @@ toml = fmap generate . runUnlined . (`evalStateT` []) . fmap catMaybes
                 ] ++ [Nothing <$ whiteSpace]
     commented = (<* optional comment)
     comment = Nothing <$ (char '#' *> many (satisfy (/= '\n'))) <?> "comment"
-    push x@(TableD ty path') = do
-        ensureUnique (ty, path')
-        modify (x:)
-    push x = modify (x:)
+    logSet k = do
+        parents <- use definedTables
+        let path' = case parents of
+                [] -> [k]
+                ((_, p) : _) -> p ++ [k]
+        definedKeypaths %= (path' :)
+        checkConflicts
+    checkConflicts = do
+        k <- use definedKeypaths
+        ts <- map snd <$> use definedTables
+        case k `intersect` ts of
+            [] -> return ()
+            (x : _) -> fail $ "conflicting definitions of '"
+                           ++ intercalate "." (map T.unpack x)
+                           ++ "' (one is an attribute, one is a table)"
+    push x = do
+        ensureUnique x
+        definedTables %= (x :)
+        checkConflicts
     ensureUnique (typ, path') = do
-        ms <- get
-        case [ (ty, ty == typ) | TableD ty ps <- ms, ps == path' ] of
+        ms <- use definedTables
+        case [ (ty, ty == typ) | (ty, ps) <- ms, ps == path' ] of
             ((_, False) : _) -> fail $ "redefinition of table '"
                      ++ intercalate "." (map T.unpack path')
                      ++ "' with different type"
@@ -191,21 +225,21 @@ toml = fmap generate . runUnlined . (`evalStateT` []) . fmap catMaybes
         _ <- char ']'
         when isArray $ () <$ char ']'
         let path' = map pack n
-        push (TableD ty path')
+        push (ty, path')
         return . Just $ TableD ty path'
     define = do
         k <- try (token key) <?> "key name"
+        logSet (pack k)
         _ <- symbol "="
         v <- token value
-        push (SetD k v)
         return . Just $ SetD k v
     key = some (satisfy (isKeyChar True False))
     keyDotless = some (satisfy (isKeyChar False True))
     isKeyChar allowDot allowEq x =
         x `notElem` "[]#" && not (isSpace x)
             && (allowDot || x /= '.') && (allowEq || x /= '=')
-    value = anyOf [list, date, number, str, bool]
-    list = (do
+    value = anyOf [list', date', number, str, bool']
+    list' = (do
         values <- brackets (commaSep' value)
         needHomogeneous values
         return . List $ V.fromList values) <?> "list"
@@ -217,7 +251,7 @@ toml = fmap generate . runUnlined . (`evalStateT` []) . fmap catMaybes
       , [ () | Date _ <- values ]
       , [ () | List _ <- values ]]) > 1)
         $ fail "mixed datatypes in list"
-    bool = Bool True  <$ X.string "true"
+    bool' = Bool True <$ X.string "true"
        <|> Bool False <$ X.string "false"
        <?> "boolean"
     commaSep' m = (<|> token' (pure [])) $ try $
@@ -258,7 +292,7 @@ toml = fmap generate . runUnlined . (`evalStateT` []) . fmap catMaybes
             _ -> panic point
         where
             panic p = fail $ "can't parse Unicode sequence '" ++ p ++ "'"
-    date = (<?> "valid date") $ do
+    date' = (<?> "valid date") $ do
         d <- fmap concat . try $ sequence
           [ count 4 digit
           , X.string "-"
@@ -286,13 +320,13 @@ generate ds = snd $ execState (go ds) (Nothing, M.empty) where
     go (SetD k v : xs) = do
         set (pack k) (Scalar v)
         go xs
-    go (t@TableD{} : xs) = do
+    go (t@TableD {} : xs) = do
         pushParent t
         _1 .= Just t
         go xs
     go [] = return ()
     pushParent (TableD Dictionary p) = _2 . path p ?= Table M.empty
-    pushParent (TableD Array p) = _2 . path p . non (Tables (V.fromList [])) . _Tables
+    pushParent (TableD Array p) = _2 . path p . non (Tables (S.fromList [])) . _Tables
         %= (|> M.empty)
     pushParent x = error (show x)
 
