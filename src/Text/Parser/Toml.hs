@@ -187,7 +187,7 @@ toml = fmap generate . runUnlined . (`evalStateT` []) . fmap catMaybes
         m <- optional (char '[')
         let isArray = isJust m
             ty = if isArray then Array else Dictionary
-        n <- key `sepBy1` char '.' <?> "table name"
+        n <- keyDotless `sepBy1` char '.' <?> "table name"
         _ <- char ']'
         when isArray $ () <$ char ']'
         let path' = map pack n
@@ -199,7 +199,11 @@ toml = fmap generate . runUnlined . (`evalStateT` []) . fmap catMaybes
         v <- token value
         push (SetD k v)
         return . Just $ SetD k v
-    key = (:) <$> letter <*> many (alphaNum <|> char '_')
+    key = some (satisfy (isKeyChar True False))
+    keyDotless = some (satisfy (isKeyChar False True))
+    isKeyChar allowDot allowEq x =
+        x `notElem` "[]#" && not (isSpace x)
+            && (allowDot || x /= '.') && (allowEq || x /= '=')
     value = anyOf [list, date, number, str, bool]
     list = (do
         values <- brackets (commaSep' value)
