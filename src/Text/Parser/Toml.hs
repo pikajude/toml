@@ -1,10 +1,12 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Text.Parser.Toml (
@@ -13,7 +15,7 @@ module Text.Parser.Toml (
     toml,
 
     -- *** The TOML AST
-    Toml (..), Value (..), Scalar (..),
+    Toml, Value (..), Scalar (..),
 
     -- * Lenses for TOML
     -- $lensdoc
@@ -36,13 +38,14 @@ import Control.DeepSeq
 import Control.Lens hiding (anyOf, inside, set)
 import Control.Monad.State
 import Data.Aeson (ToJSON (..))
-import qualified Data.Aeson as A
 import Data.Char
 import Data.Data
 import Data.List
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe
+import Data.Monoid
+import Data.String
 import Data.Text (Text, pack)
 import qualified Data.Text as T
 import Data.Time
@@ -56,15 +59,14 @@ import qualified Text.Trifecta as X
 
 #define INSTANCES (Data, Eq, Ord, Read, Show, Typeable)
 
+-- $setup
+-- The code examples in this module require GHC's `OverloadedStrings`
+-- extension:
+--
+-- >>> :set -XOverloadedStrings
+
 -- | Represents TOML.
-newtype Toml = Toml { unToml :: Map Text Value }
-             deriving INSTANCES
-
-instance ToJSON Toml where
-    toJSON (Toml xs) = A.object . map (\ (a, b) -> a A..= toJSON b) $ M.toList xs
-
-instance NFData Toml where
-    rnf (Toml t) = rnf t
+type Toml = Map Text Value
 
 -- | Top-level TOML values.
 --
@@ -270,8 +272,13 @@ toml = fmap generate . runUnlined . (`evalStateT` []) . fmap catMaybes
             Just d8 | formatISO8601 d8 == d -> return $ Date d8
             _ -> fail $ "invalid date " ++ show d ++ ""
 
+instance IsString Toml where
+    fromString v = case parseString toml mempty v of
+        Success x -> x
+        _ -> error "invalid toml doc"
+
 generate :: [Directive] -> Toml
-generate ds = snd $ execState (go ds) (Nothing, Toml M.empty) where
+generate ds = snd $ execState (go ds) (Nothing, M.empty) where
     go (SetD k v : xs) = do
         set (pack k) (Scalar v)
         go xs
@@ -280,9 +287,9 @@ generate ds = snd $ execState (go ds) (Nothing, Toml M.empty) where
         _1 .= Just t
         go xs
     go [] = return ()
-    pushParent (TableD Dictionary p) = _2 . path p ?= Table (Toml M.empty)
+    pushParent (TableD Dictionary p) = _2 . path p ?= Table M.empty
     pushParent (TableD Array p) = _2 . path p . non (Tables (V.fromList [])) . _Tables
-        %= (|> Toml M.empty)
+        %= (|> M.empty)
     pushParent x = error (show x)
 
 set :: Text -> Value -> State (Maybe Directive, Toml) ()
@@ -300,108 +307,76 @@ path :: Applicative f
      => [Text] -> (Maybe Value -> f (Maybe Value)) -> Toml -> f Toml
 path [] = error "path"
 path [x] = at x
-path (x : xs) = at x . non (Table (Toml M.empty))
+path (x : xs) = at x . non (Table M.empty)
               . failing _Table (_Tables . _last) . path xs
-
-type instance IxValue Toml = Value
-type instance Index Toml = Text
-
-instance Ixed Toml where
-    ix k f t = case M.lookup k (unToml t) of
-        Just v -> f v <&> \ v' -> Toml (M.insert k v' (unToml t))
-        Nothing -> pure t
-
-instance At Toml where
-    at k f t = f mv <&> \ r -> case r of
-        Nothing -> maybe t (const (Toml (M.delete k (unToml t)))) mv
-        Just v' -> Toml $ M.insert k v' (unToml t)
-        where mv = M.lookup k (unToml t)
 
 -- | Traverse a TOML table, given a key name.
 --
--- @[some_table]@
-table :: (Ixed m, IxValue m ~ Value)
-      => Index m -> Traversal' m (Map Text Value)
-table t = ix t . _Table . iso unToml Toml
+-- >>> "[foo]" ^? table "foo"
+-- Just (fromList [])
+table :: Text -> Traversal' Toml Toml
+table t = ix t . _Table
 
 -- | Traverse a list of TOML tables, given their shared key name.
 --
--- @[[some_table]]@
-tables :: (Ixed m, IxValue m ~ Value)
-       => Index m -> Traversal' m (Map Text Value)
-tables ts = ix ts . _Tables . traverse . iso unToml Toml
+-- >>> "[[foo]]\n[[foo]]" & lengthOf (tables "foo")
+-- 2
+tables :: Text -> Traversal' Toml Toml
+tables ts = ix ts . _Tables . traverse
 
 -- | Target a generic 'Scalar' value.
 --
--- @foo = "bar"@
-scalar :: (Ixed m, IxValue m ~ Value)
-       => Index m -> Traversal' m Scalar
+-- >>> "foo = \"bar\"" ^? scalar "foo"
+-- Just (String "bar")
+scalar :: Text -> Traversal' Toml Scalar
 scalar t = ix t . _Scalar
 
 -- | Given a key name, target a 'String' value. Will fail if the key is
 -- present, but is not a 'String'.
 --
--- @foo = "bar"@
---
--- >>> doc ^? string "foo"
+-- >>> "foo = \"bar\"" ^? string "foo"
 -- Just "bar"
-string :: (Ixed m, IxValue m ~ Value)
-       => Index m -> Traversal' m Text
+string :: Text -> Traversal' Toml Text
 string t = ix t . _Scalar . _String
 
 -- | Given a key name, target a 'Decimal' value. Will fail if the key is
 -- present, but is not a 'Decimal'.
 --
--- @foo = 1234@
---
--- >>> doc ^? decimal "foo"
+-- >>> "foo = 1234" ^? decimal "foo"
 -- Just 1234
-decimal :: (Ixed m, IxValue m ~ Value)
-        => Index m -> Traversal' m Integer
+decimal :: Text -> Traversal' Toml Integer
 decimal t = ix t . _Scalar . _Decimal
 
 -- | Given a key name, target a 'Floating' value. Will fail if the key is
 -- present, but is not 'Floating'.
 --
--- @foo = 1234.567@
---
--- >>> doc ^? floating "foo"
+-- >>> "foo = 1234.567" ^? floating "foo"
 -- Just 1234.567
-floating :: (Ixed m, IxValue m ~ Value)
-         => Index m -> Traversal' m Double
+floating :: Text -> Traversal' Toml Double
 floating t = ix t . _Scalar . _Floating
 
 -- | Given a key name, target a 'Bool' value. Will fail if the key is
 -- present, but is not a 'Bool'.
 --
--- @foo = false@
---
--- >>> doc ^? bool "foo"
+-- >>> "foo = false" ^? bool "foo"
 -- Just False
-bool :: (Ixed m, IxValue m ~ Value)
-     => Index m -> Traversal' m Bool
+bool :: Text -> Traversal' Toml Bool
 bool t = ix t . _Scalar . _Bool
 
 -- | Given a key name, target a 'Date' value. Will fail if the key is
 -- present, but is not a 'Date'.
 --
--- @foo = 1994-04-28T05:30:22Z@
---
--- >>> doc ^? date "foo"
+-- >>> "foo = 1994-04-28T05:30:22Z" ^? date "foo"
 -- Just 1994-04-28 05:30:22 UTC
-date :: (Ixed m, IxValue m ~ Value)
-     => Index m -> Traversal' m UTCTime
+date :: Text -> Traversal' Toml UTCTime
 date t = ix t . _Scalar . _Date
 
 -- | Given a key name, target a 'List' value. Will fail if the key is
 -- present, but is not a 'List'.
 --
--- @foo = [1, 2, 3]@
---
--- >>> doc ^? list "foo"
+-- >>> "foo = [1, 2, 3]" ^? list "foo"
 -- Just (fromList [Decimal 1,Decimal 2,Decimal 3])
-list :: (Ixed m, IxValue m ~ Value)
-     => Index m -> Traversal' m (Vector Scalar)
+list :: Text -> Traversal' Toml (Vector Scalar)
 list t = ix t . _Scalar . _List
 
 -- | Given a key name and a prism, target all the elements of a 'List' that
@@ -410,25 +385,15 @@ list t = ix t . _Scalar . _List
 -- lists are homogeneous, so you will always either retrieve the whole list
 -- or none of it.)
 --
--- @foo = [1, 2, 3]@
---
--- >>> doc ^.. listOf "foo" _Decimal
+-- >>> "foo = [1, 2, 3]" ^.. listOf "foo" _Decimal
 -- [1,2,3]
-listOf :: (Ixed m, IxValue m ~ Value)
-       => Index m -> Prism' Scalar p -> Traversal' m p
+listOf :: Text -> Prism' Scalar p -> Traversal' Toml p
 listOf t p = ix t . _Scalar . _List . traverse . p
 
 -- $lensdoc
 -- Traversing anything JSON-like in Haskell is usually a huge pain unless
 -- you can conceive some kind of convenient DSL for it. In this case we use
 -- utilities provided by the @lens@ package.
---
--- You will notice that every lens provided here is of the form
---
--- @('Ixed' m, 'IxValue' m ~ 'Value') => 'Index' m -> ...@
---
--- 'Toml' has a trivial 'Ixed' instance; any traversal that can be applied
--- to @'Map' 'Text' 'Value'@ can be applied to 'Toml' as well.
 --
 -- Here's an example document; it's similar to the
 -- <https://github.com/toml-lang/toml#example example on GitHub>,
@@ -474,8 +439,7 @@ listOf t p = ix t . _Scalar . _List . traverse . p
 --
 -- You can easily parse it using 'toml':
 --
--- >>> ast <- parseFromFileEx toml "example.txt"
--- a giant, ugly AST goes here...
+-- >>> Just ast <- parseFromFile toml "example.txt"
 --
 -- Using the functions that @lens@ provides and the combinators here, you
 -- can then traverse deeply into the resultant structure to retrieve data:
@@ -484,11 +448,13 @@ listOf t p = ix t . _Scalar . _List . traverse . p
 -- Just "GitHub Cofounder & CEO\nLikes tater tots and beer."
 --
 -- >>> ast ^.. tables "servers" . string "ip" -- list every server IP
--- ["10.0.0.1", "10.0.0.2"]
+-- ["10.0.0.1","10.0.0.2"]
 --
--- >>> ast ^.. table "clients" . list "hosts" . traverse . _String -- retrieve the client hostnames
--- ["alpha", "omega"]
+-- >>> ast ^.. table "database" . listOf "ports" _Decimal -- retrieve the client hostnames
+-- [8001,8001,8002]
 --
 -- You can even modify the AST:
 --
--- >>> ast & tables "servers" . string "name" <>~ "-server"
+-- >>> let newHosts = ast & table "clients" . listOf "hosts" _String %~ T.reverse
+-- >>> newHosts ^? table "clients" . list "hosts"
+-- Just (fromList [String "ahpla",String "agemo"])

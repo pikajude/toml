@@ -94,7 +94,7 @@ import Text.PrettyPrint.ANSI.Leijen
 ppr :: Toml -> Doc
 ppr t = vsep
       [ lbrace
-      , indent 2 (vcat (punctuate comma (map pprPair . M.toList $ unToml t)))
+      , indent 2 (vcat (punctuate comma (map pprPair $ M.toList t)))
       , rbrace ]
 
 pprPair :: (Text, Value) -> Doc
