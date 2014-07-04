@@ -14,11 +14,17 @@ source-repository head
   type: git
   location: https://github.com/joelteon/toml.git
 
+flag lib-Werror
+  default: False
+  manual: True
+
 library
   exposed-modules:     Text.Parser.Toml
                        Text.Parser.Toml.Pretty
   other-modules:       Text.Parser.Toml.TH
-  ghc-options:         -Wall -Werror
+  ghc-options:         -Wall
+  if flag(lib-Werror)
+    ghc-options:       -Werror
   build-depends:       base >=4.7 && <4.8
                      , aeson
                      , ansi-wl-pprint
