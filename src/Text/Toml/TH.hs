@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module Text.Parser.Toml.TH where
+module Text.Toml.TH (prismatic) where
 
 import Control.Lens
 import Language.Haskell.TH

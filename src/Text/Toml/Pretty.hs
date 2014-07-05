@@ -1,5 +1,5 @@
 -- | Pretty-print TOML.
-module Text.Parser.Toml.Pretty (ppr) where
+module Text.Toml.Pretty (ppr) where
 
 import Data.Aeson (encode, toJSON)
 import qualified Data.ByteString.Lazy.UTF8 as B
@@ -7,7 +7,7 @@ import Data.Foldable
 import qualified Data.Map as M
 import Data.Text (Text)
 import Data.Time.ISO8601
-import Text.Parser.Toml
+import Text.Toml
 import Text.PrettyPrint.ANSI.Leijen
 
 -- | Pretty-prints TOML as JSON.

@@ -2,7 +2,7 @@
 
 import Control.Exception (evaluate)
 import Test.Hspec
-import Text.Parser.Toml (Toml)
+import Text.Toml (Toml)
 
 main :: IO ()
 main = hspec $

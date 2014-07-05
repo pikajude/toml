@@ -2,7 +2,7 @@ name:                toml
 version:             0.1.0.0
 synopsis:            TOML parser
 description:         For parsing TOML. Also includes lenses.
-license:             BSD2
+license:             BSD3
 license-file:        LICENSE
 author:              Joel Taylor
 maintainer:          me@joelt.io
@@ -19,9 +19,9 @@ flag lib-Werror
   manual: True
 
 library
-  exposed-modules:     Text.Parser.Toml
-                       Text.Parser.Toml.Pretty
-  other-modules:       Text.Parser.Toml.TH
+  exposed-modules:     Text.Toml
+                       Text.Toml.Pretty
+  other-modules:       Text.Toml.TH
   ghc-options:         -Wall
   if flag(lib-Werror)
     ghc-options:       -Werror

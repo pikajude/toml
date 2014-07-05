@@ -11,7 +11,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Text.Parser.Toml (
+module Text.Toml (
     -- * Parsing TOML
     -- *** The parser
     toml,
@@ -58,7 +58,7 @@ import Data.Time.ISO8601
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Numeric
-import Text.Parser.Toml.TH
+import Text.Toml.TH
 import Text.Trifecta hiding (decimal, string)
 import qualified Text.Trifecta as X
 
