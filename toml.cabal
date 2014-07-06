@@ -25,7 +25,7 @@ library
   ghc-options:         -Wall
   if flag(lib-Werror)
     ghc-options:       -Werror
-  build-depends:       base >=4.7 && <4.8
+  build-depends:       base ==4.*
                      , aeson
                      , ansi-wl-pprint
                      , bytestring
