@@ -5,6 +5,9 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ <= 704
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+#endif
 
 module Text.Toml (
     -- * Parsing TOML
@@ -84,6 +87,11 @@ data Value = Table Toml
            | Scalar Scalar
            deriving INSTANCES
 
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ <= 704
+instance NFData a => NFData (Seq a) where
+    rnf = rnf . toList
+#endif
+
 instance ToJSON Value where
     toJSON (Table t) = toJSON t
     toJSON (Tables ts) = toJSON . toList $ ts
@@ -118,7 +126,7 @@ instance ToJSON Scalar where
     toJSON (Floating d) = toJSON d
     toJSON (Bool b) = toJSON b
     toJSON (Date u) = toJSON $ formatISO8601 u
-    toJSON (List vs) = toJSON $ V.toList vs
+    toJSON (List vs) = toJSON $ toList vs
 
 instance NFData Scalar where
     rnf (String t) = rnf t
