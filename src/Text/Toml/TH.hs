@@ -13,13 +13,13 @@ prismatic name parent child = do
     let ty = toType child
     x <- newName "x"
     let xpat = varP x
-    -- 7.6 doesn't support pattern splices
     f <- funD prismName [clause []
-        (normalB [|prism' $(conE conName) $(lamCaseE
+        (normalB [|prism' $(conE conName) $(lamE [xpat] (
+            caseE (varE x)
                 [match (conP conName [varP conArg])
                     (normalB [|Just $(varE conArg)|])
                     []
-                , match wildP (normalB [|Nothing|]) []])|])
+                , match wildP (normalB [|Nothing|]) []]))|])
         []]
     t <- [t|Prism' $(conT $ mkName parent) $(ty)|]
     return [SigD prismName t, f]
