@@ -1,6 +1,7 @@
 language: haskell
 
 env:
+  - GHCVER=7.4.2
   - GHCVER=7.6.3
   - GHCVER=7.8.2
   - GHCVER=head
@@ -17,8 +18,8 @@ before_install:
     else
       travis_retry sudo add-apt-repository -y ppa:hvr/ghc
       travis_retry sudo apt-get update
-      travis_retry sudo apt-get install cabal-install-1.18 ghc-$GHCVER happy
-      export CABAL=cabal-1.18
+      travis_retry sudo apt-get install cabal-install-1.20 ghc-$GHCVER happy
+      export CABAL=cabal-1.20
       export PATH=/opt/ghc/$GHCVER/bin:$PATH
     fi
   - $CABAL update
