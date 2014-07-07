@@ -96,7 +96,7 @@ ppr t = vsep
       , rbrace ]
 
 pprPair :: (Text, Value) -> Doc
-pprPair (k,v) = pprScalar (String k) <> text ":" <+> pprValue v
+pprPair (k,v) = dullblue (pprString k) <> text ":" <+> pprValue v
 
 pprValue :: Value -> Doc
 pprValue (Table t) = ppr t
@@ -107,11 +107,14 @@ pprValue (Tables ts) = vsep
 pprValue (Scalar s) = pprScalar s
 
 pprScalar :: Scalar -> Doc
-pprScalar (String t) = text (B.toString . encode $ toJSON t)
-pprScalar (Decimal d) = integer d
-pprScalar (Floating f) = double f
-pprScalar (Bool True) = text "true"
-pprScalar (Bool False) = text "false"
-pprScalar (Date d) = text $ show (formatISO8601 d)
+pprScalar (String t) = dullmagenta $ pprString t
+pprScalar (Decimal d) = dullgreen $ integer d
+pprScalar (Floating f) = dullgreen $ double f
+pprScalar (Bool True) = bold $ text "true"
+pprScalar (Bool False) = bold $ text "false"
+pprScalar (Date d) = dullyellow . text $ show (formatISO8601 d)
 pprScalar (List vs) = brackets $ hsep
     (punctuate comma . map pprScalar $ toList vs)
+
+pprString :: Text -> Doc
+pprString t = text (B.toString . encode $ toJSON t)
