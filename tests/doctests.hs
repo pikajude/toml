@@ -1,2 +1,11 @@
+import Build_doctests (deps)
 import Test.DocTest
-main = doctest ["-isrc", "src/Text/Toml.hs"]
+
+main :: IO ()
+main = doctest $
+    "-isrc"
+  : "-idist/build/autogen"
+  : "-optP-include"
+  : "-optPdist/build/autogen/cabal_macros.h"
+  : "-hide-all-packages"
+  : map ("-package=" ++) deps ++ ["src/Text/Toml.hs"]

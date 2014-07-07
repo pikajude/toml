@@ -7,7 +7,7 @@ license-file:        LICENSE
 author:              Joel Taylor
 maintainer:          me@joelt.io
 category:            Text
-build-type:          Simple
+build-type:          Custom
 cabal-version:       >=1.10
 
 source-repository head
