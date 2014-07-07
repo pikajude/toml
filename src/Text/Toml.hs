@@ -3,14 +3,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Text.Toml (
     -- * Parsing TOML
@@ -66,9 +60,6 @@ import qualified Text.Trifecta as X
 #define INSTANCES (Data, Eq, Ord, Read, Show, Typeable)
 
 -- $setup
--- The code examples in this module require GHC's `OverloadedStrings`
--- extension:
---
 -- >>> :set -XOverloadedStrings
 
 -- | Represents TOML.
@@ -149,17 +140,6 @@ prismatic "Date" "Scalar" "UTCTime"
 prismatic "List" "Scalar" "Vector Scalar"
 
 
--- this is an orphan
-instance DeltaParsing p => DeltaParsing (Unlined p) where
-    line = lift line
-    position = lift position
-    slicedWith f = Unlined . slicedWith f . runUnlined
-
-instance MarkParsing d m => MarkParsing d (Unlined m) where
-    mark = Unlined mark
-    release = Unlined . release
-
-
 type KeyPath = [Text]
 
 -- not exposed, used during parsing
@@ -178,8 +158,7 @@ makeLenses ''ParseState
 
 -- | Parse some TOML.
 toml :: (TokenParsing m, MonadPlus m) => m Toml
-toml = fmap generate . runUnlined . (`evalStateT` ParseState [] [])
-     . fmap catMaybes
+toml = fmap generate . runUnlined . (`evalStateT` ParseState [] []) . fmap catMaybes
      $ (whiteSpace *> entity) `sepBy` char '\n' <* eof where
     entity = anyOf $
                 [ comment
@@ -489,7 +468,7 @@ listOf t p = ix t . _Scalar . _List . traverse . p
 -- >>> ast ^.. tables "servers" . string "ip" -- list every server IP
 -- ["10.0.0.1","10.0.0.2"]
 --
--- >>> ast ^.. table "database" . listOf "ports" _Decimal -- retrieve the client hostnames
+-- >>> ast ^.. table "database" . listOf "ports" _Decimal -- get database ports
 -- [8001,8001,8002]
 --
 -- You can even modify the AST:
