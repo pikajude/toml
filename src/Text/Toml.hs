@@ -9,6 +9,10 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 #endif
 
+#include "toml.h"
+
+-- | Parsing and traversing TOML, some guy's weird replacement for .ini
+-- files.
 module Text.Toml (
     -- * Parsing TOML
     -- *** The parser
@@ -56,11 +60,8 @@ import Data.Time.ISO8601
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Numeric
-import Text.Toml.TH
 import Text.Trifecta hiding (decimal, string)
 import qualified Text.Trifecta as X
-
-#define INSTANCES (Data, Eq, Ord, Read, Show, Typeable)
 
 -- $setup
 -- >>> :set -XOverloadedStrings
@@ -136,16 +137,25 @@ instance NFData Scalar where
     rnf (Date t) = rnf t
     rnf (List t) = rnf t
 
-prismatic "Table" "Value" "Toml"
-prismatic "Tables" "Value" "Seq Toml"
-prismatic "Scalar" "Value" "Scalar"
+-- | Focus on a table
+PRISM(Table, Value, Toml)
+-- | Focus on a list of tables
+PRISM(Tables, Value, (Seq Toml))
+-- | Focus on a scalar
+PRISM(Scalar, Value, Scalar)
 
-prismatic "String" "Scalar" "Text"
-prismatic "Decimal" "Scalar" "Integer"
-prismatic "Floating" "Scalar" "Double"
-prismatic "Bool" "Scalar" "Bool"
-prismatic "Date" "Scalar" "UTCTime"
-prismatic "List" "Scalar" "Vector Scalar"
+-- | Focus on a 'String'
+PRISM(String, Scalar, Text)
+-- | Focus on a 'Decimal'
+PRISM(Decimal, Scalar, Integer)
+-- | Focus on a 'Floating'
+PRISM(Floating, Scalar, Double)
+-- | Focus on a 'Bool'
+PRISM(Bool, Scalar, Bool)
+-- | Focus on a 'Date'
+PRISM(Date, Scalar, UTCTime)
+-- | Focus on a 'List'
+PRISM(List, Scalar, (Vector Scalar))
 
 
 type KeyPath = [Text]
