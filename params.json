@@ -1,0 +1,1 @@
+{"name":"TOML for Haskell","tagline":"","body":"[![Build Status](https://travis-ci.org/joelteon/toml.svg?branch=master)](https://travis-ci.org/joelteon/toml)\r\n\r\nParser and traversals for [TOML](https://github.com/toml-lang/toml).\r\n","google":"","note":"Don't delete this file! It's used internally to help with page regeneration."}
