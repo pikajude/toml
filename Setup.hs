@@ -1,4 +1,3 @@
-\begin{code}
 {-# OPTIONS_GHC -Wall #-}
 module Main (main) where
 
@@ -39,5 +38,3 @@ generateBuildModule verbosity pkg lbi = do
 
 testDeps :: ComponentLocalBuildInfo -> ComponentLocalBuildInfo -> [(InstalledPackageId, PackageId)]
 testDeps xs ys = nub $ componentPackageDeps xs ++ componentPackageDeps ys
-
-\end{code}
